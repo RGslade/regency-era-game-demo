@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "Regency Era Game",
+    "slug": "regency-era-game",
+    "version": "0.1.0",
+    "scheme": "regency-era-game",
+    "platforms": [
+      "ios",
+      "android"
+    ],
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "splash": {
+      "image": "./assets/images/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0F172A"
+    },
+    "assetBundlePatterns": [
+      "assets/images/icon.png",
+      "assets/sounds/*.wav"
+    ],
+    "jsEngine": "hermes",
+    "plugins": [
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-3940256099942544~3347511713",
+          "iosAppId": "ca-app-pub-3940256099942544~1458002511"
+        }
+      ],
+      "expo-audio"
+    ],
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#0F172A"
+      },
+      "package": "com.example.regencyeragame"
+    },
+    "extra": {}
+  }
+}

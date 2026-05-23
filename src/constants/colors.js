@@ -1,0 +1,18 @@
+export const colors = {
+  background: '#2c1810',
+  header: 'rgba(20, 10, 5, 0.9)',
+  footer: 'rgba(20, 10, 5, 0.95)',
+  panel: '#3b2416',
+  overlay: 'rgba(139, 105, 20, 0.3)',
+  choice: 'rgba(139, 105, 20, 0.4)',
+  button: 'rgba(139, 105, 20, 0.5)',
+  accent: '#8b6914',
+  title: '#d4af37',
+  text: '#f5e6d3',
+  muted: '#d8c3a2',
+  relationshipLow: '#b03a2e',
+  relationshipHigh: '#6fbf73',
+  relationshipNeutral: '#8b6914',
+  nameNeutral: '#5aa6e8',
+  toastBackground: 'rgba(20, 10, 5, 0.95)',
+};

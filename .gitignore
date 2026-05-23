@@ -1,0 +1,13 @@
+node_modules/
+.expo/
+.expo-shared/
+.env.*
+.env
+*.jks
+*.keystore
+google-services.json
+GoogleService-Info.plist
+android/app/src/main/assets/adi-registration.properties
+assets/adi-registration.properties
+godot/.godot/
+godot/export_presets.cfg

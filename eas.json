@@ -1,0 +1,32 @@
+{
+  "cli": {
+    "version": ">= 16.24.1",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": {
+        "resourceClass": "m-medium"
+      },
+      "node": "20.19.4"
+    },
+    "preview": {
+      "distribution": "internal",
+      "ios": {
+        "resourceClass": "m-medium"
+      }
+    },
+    "production": {
+      "ios": {
+        "resourceClass": "m-medium"
+      },
+      "autoIncrement": true,
+      "node": "20.19.4"
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
