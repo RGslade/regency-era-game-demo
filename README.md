@@ -20,7 +20,7 @@ This repository is prepared as a public-facing demo for developers and employers
 - React Native 0.79
 - AsyncStorage
 - Expo Audio
-- React Native Google Mobile Ads
+- React Native Google Mobile Ads (Google Admob)
 - RevenueCat Purchases
 - Supabase Edge Functions, optional
 
