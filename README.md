@@ -2,7 +2,7 @@
 
 Regency Era Game is an Expo and React Native mobile text adventure set in early nineteenth-century Britain. Players move through AI-assisted branching story turns, manage relationships with recurring characters, spend and earn an in-game Crown currency, and adjust reading/audio preferences for a lightweight narrative game experience.
 
-This repository is a public demo intended for employers and technical reviewers. It shows the mobile client architecture, local persistence, monetization boundaries, AI story orchestration contract, and safe fallback behaviour without exposing private production infrastructure. Production-only secrets, Supabase service-role credentials, OpenAI keys, RevenueCat production keys, and private Edge Function implementations are intentionally excluded.
+This repository is a public demo intended for employers and technical reviewers. It shows the mobile client architecture, local persistence, monetization boundaries, AI story orchestration contract, safe fallback behaviour, and a deployable sample Supabase backend. Production-only secrets, Supabase service-role credentials, OpenAI keys, RevenueCat production keys, and store credentials are intentionally excluded.
 
 ## Project Purpose
 
@@ -31,7 +31,7 @@ The problem it solves is twofold: it gives players a more dynamic story than a f
 - **JavaScript with TypeScript tooling**: The source is currently JavaScript (`.js`) with a TypeScript config and React type packages present for tooling compatibility. This is not a fully TypeScript-typed codebase yet.
 - **Expo Audio**: Used for local sound effects in the story loop and Crown shop.
 - **AsyncStorage**: Core persistence layer for saves, app settings, wallet state, anonymous identity, and local report queues.
-- **Supabase configuration and Edge Function client contract**: `supabase/config.toml` is present for local Supabase setup. The client calls optional Edge Functions named `app-config`, `generate-story-turn`, `crown-wallet`, `report-ai-outcome`, and `user-settings`. The actual private function implementations are not part of this public demo.
+- **Supabase configuration and Edge Function client contract**: `supabase/config.toml`, migrations, seed data, and sample Edge Functions are present for local or hosted Supabase setup. The client calls optional Edge Functions named `app-config`, `generate-story-turn`, `crown-wallet`, `report-ai-outcome`, and `user-settings`.
 - **OpenAI/API integration**: The client does not call OpenAI directly. In production, OpenAI calls belong behind Supabase Edge Functions so model keys remain server-side. The public demo contains the request/validation/fallback client layer only.
 - **RevenueCat Purchases**: Integrated through `react-native-purchases` for subscriptions, purchase restoration, entitlements, and Crown top-up products. It is optional for local review and requires private keys/store products to be fully functional.
 - **Google AdMob**: Integrated through `react-native-google-mobile-ads` for banner, interstitial, and rewarded ads. Test app IDs are configured in `app.json`; development ad-unit fallbacks use `TestIds.BANNER`, `TestIds.INTERSTITIAL`, and `TestIds.REWARDED`. Environment variables can override those values when needed.
@@ -56,7 +56,7 @@ The problem it solves is twofold: it gives players a more dynamic story than a f
 |   +-- services/             # Storage, config, AI/backend, wallet, logging, bridge services
 |   +-- styles/               # Central React Native StyleSheet definitions
 |   +-- types/                # Domain data: characters, names, places, settings, scenarios
-+-- supabase/config.toml       # Local Supabase CLI configuration
++-- supabase/                  # Supabase CLI config, migration, seed, and Edge Functions
 ```
 
 The app separates screen rendering from service concerns. Screens own user interactions and presentation state; services own persistence, backend calls, wallet rules, configuration, logging, and AI story validation. Constants and domain data are kept outside components so story content, economy values, colours, and setting metadata can evolve without scattering changes through UI code.
@@ -82,9 +82,9 @@ The public client is prepared to use the following Supabase Edge Function endpoi
 - `report-ai-outcome`: accepts structured player reports about poor AI output.
 - `user-settings`: saves and loads player settings for the anonymous user ID.
 
-AI integration is deliberately backend-mediated. The client builds a compact story payload, removes player-name references from NPC lists, submits the request to the story function, validates the returned scene, corrects impossible location drift, and falls back locally if the backend is not configured. In production, the Edge Function would call OpenAI or another model provider using server-side secrets and would enforce wallet spend rules before returning content.
+The Supabase directory also includes `revenuecat-webhook`, which records RevenueCat events and applies subscription/top-up Crown grants server-side.
 
-Private Edge Function source, service-role keys, production app configuration, and model provider secrets are removed from this repository. Without those services, the demo runs in fallback mode: local story generation, local wallet persistence, local settings persistence, and safe test ad configuration.
+AI integration is deliberately backend-mediated. The client builds a compact story payload, removes player-name references from NPC lists, submits the request to the story function, validates the returned scene, corrects impossible location drift, and falls back locally if the backend is not configured. The sample `generate-story-turn` function calls OpenAI when `OPENAI_API_KEY` is configured and returns a deterministic backend fallback when it is not, so the Supabase path can still be demonstrated safely.
 
 ## Security
 
@@ -92,7 +92,7 @@ Private Edge Function source, service-role keys, production app configuration, a
 - Public runtime values use `EXPO_PUBLIC_` environment variables because Expo embeds them in the client bundle. Only public or test values should use this prefix.
 - Sensitive API keys, OpenAI keys, Supabase service-role credentials, purchase webhooks, and privileged wallet mutations belong on server-side Supabase Edge Functions.
 - The client sends only the Supabase anon key to Edge Functions. If JWT verification is enabled, the function must accept a JWT-style anon key; otherwise functions using publishable keys should be deployed with the appropriate public verification settings.
-- Production Supabase tables should use Row Level Security and policies that limit each anonymous/authenticated user to their own settings, reports, and wallet rows. This repository includes the client contract and Supabase CLI config, not production database policies.
+- Supabase tables have Row Level Security enabled. The mobile app talks to Edge Functions, and the functions use the server-side service role key for privileged database work.
 - The public demo is safe to run without private credentials. Missing backend configuration triggers local fallback behaviour rather than exposing or requiring secrets.
 
 ## Running Locally
@@ -101,6 +101,7 @@ Prerequisites:
 
 - Node `^22.18.0` and npm `^11.12.1` are declared in `package.json`.
 - EAS build profiles currently pin Node `20.19.4` for selected cloud build profiles. For local development, use the package engine versions when possible.
+- Supabase CLI is required only when running or deploying the checked-in backend.
 - Android Studio/Xcode are required for native device or simulator builds.
 
 Setup:
@@ -120,7 +121,35 @@ npm start
 npm run android
 npm run ios
 npm run lint
+npm run typecheck
+npm run supabase:start
+npm run supabase:reset
 npm run build:android
+```
+
+Supabase setup:
+
+```bash
+cp supabase/.env.example supabase/.env
+supabase start
+supabase db reset
+supabase functions serve --env-file supabase/.env
+```
+
+For a hosted Supabase project, link the project with the Supabase CLI, push the migration, set the secrets from `supabase/.env.example`, and deploy the functions:
+
+```bash
+supabase link --project-ref <project-ref>
+supabase db push
+supabase secrets set --env-file supabase/.env
+npm run supabase:deploy:functions
+```
+
+Then set the app `.env` values:
+
+```bash
+EXPO_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=<anon-or-publishable-key>
 ```
 
 The app can run without private keys. If Supabase is not configured, story turns use the local fallback scene generator and wallet/settings remain local. RevenueCat purchases require valid SDK keys and store product configuration. AdMob can be reviewed safely because development builds use the built-in Google Mobile Ads test IDs from `react-native-google-mobile-ads`.
@@ -140,8 +169,8 @@ EXPO_PUBLIC_ADMOB_REWARDED_UNIT_ID=
 
 Optional services for local review:
 
-- **Supabase**: optional unless testing real Edge Function integration.
-- **OpenAI/model provider**: production-only and should be called by Edge Functions, not the app.
+- **Supabase**: optional unless testing real Edge Function integration. The checked-in `supabase/` directory can run locally or be deployed to a project of your choosing.
+- **OpenAI/model provider**: optional for the sample story Edge Function. Without `OPENAI_API_KEY`, the function returns a deterministic backend fallback scene.
 - **RevenueCat**: optional unless testing purchase products and entitlements.
 - **AdMob**: optional; test IDs are sufficient for demo review.
 
@@ -192,13 +221,12 @@ Demo video placeholder: `<add demo video link>`
 
 ## Known Limitations
 
-- Private Supabase Edge Function implementations are not included.
-- OpenAI/model calls are not made directly by this repository; they are represented by the backend contract and local fallback.
+- OpenAI/model calls are made only from the sample Supabase Edge Function when `OPENAI_API_KEY` is configured; the mobile client never calls a model provider directly.
 - Production service-role keys, OpenAI keys, RevenueCat production keys, AdMob production IDs, and store credentials are removed.
 - Supabase Auth UI is not implemented. The demo uses a generated anonymous user ID for local/backend sync.
 - Notification scheduling is not implemented. The settings screen stores a notification preference for future reminder prompts.
 - Automated tests are not yet present.
-- Some production wallet enforcement would need to happen server-side in the private backend; the public demo includes local fallback logic so review remains possible.
+- Production wallet enforcement should continue to live server-side. The sample Supabase functions enforce AI-turn spend, rewarded-ad grants, subscription grants, and top-up grants for demo use.
 - The app currently uses a simple app-level bridge object to avoid deep prop drilling. It is pragmatic for this demo but could be replaced with a formal provider/context layer as the app grows.
 
 ## Roadmap
@@ -206,7 +234,7 @@ Demo video placeholder: `<add demo video link>`
 - Add Jest and React Native Testing Library coverage for services and screens.
 - Add E2E smoke tests for core mobile flows.
 - Add CI/CD for linting, tests, EAS build validation, and dependency checks.
-- Provide a Docker/local Supabase backend profile with sample Edge Functions and seed data for reviewers.
+- Add stricter integration tests for Supabase Edge Function contracts.
 - Improve accessibility: labels, focus order, dynamic type handling, reduced-motion options, and screen reader review.
 - Expand offline support with clearer conflict handling between local wallet/settings state and backend state.
 - Add richer error recovery for failed AI turns, ad loading, and purchase setup.

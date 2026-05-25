@@ -6,7 +6,10 @@
     "start": "expo start",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
-    "test": "jest --watchAll=false",
+    "test": "npm run typecheck",
+    "supabase:start": "supabase start",
+    "supabase:reset": "supabase db reset",
+    "supabase:deploy:functions": "supabase functions deploy app-config && supabase functions deploy generate-story-turn && supabase functions deploy crown-wallet && supabase functions deploy report-ai-outcome && supabase functions deploy user-settings && supabase functions deploy revenuecat-webhook",
     "build:android": "eas build --platform android",
     "build:ios": "eas build --platform ios"
   },
