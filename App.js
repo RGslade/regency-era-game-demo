@@ -44,11 +44,11 @@ const mergeCrownWallets = (localWallet = createDefaultCrownWallet(), backendWall
 };
 
 export default function Main() {
-  const [screen, setScreen] = useState('game');
+  const [activeScreen, setActiveScreen] = useState('game');
   const [errorMessage, setErrorMessage] = useState('');
   const [appConfig, setAppConfig] = useState(DEFAULT_APP_CONFIG);
-  const [appConfigReady, setAppConfigReady] = useState(false);
-  const [adInitialized, setAdInitialized] = useState(false);
+  const [runtimeConfigReady, setRuntimeConfigReady] = useState(false);
+  const [adSdkInitialized, setAdSdkInitialized] = useState(false);
   const [adsRemoved, setAdsRemoved] = useState(false);
   const [anonymousUserId, setAnonymousUserId] = useState('');
   const [crownWallet, setCrownWallet] = useState(createDefaultCrownWallet);
@@ -79,7 +79,7 @@ export default function Main() {
   );
 
   // Expose app-level controls to screen modules without prop drilling.
-  appBridge.setScreen = setScreen;
+  appBridge.setScreen = setActiveScreen;
   appBridge.setErrorMessage = setErrorMessage;
   appBridge.setAdsRemoved = setAdsRemoved;
   appBridge.adsRemoved = adsRemoved;
@@ -110,7 +110,7 @@ export default function Main() {
       .then((config) => {
         if (isMounted) {
           setAppConfig(config);
-          setAppConfigReady(true);
+          setRuntimeConfigReady(true);
         }
       })
       .catch((error) => {
@@ -119,7 +119,7 @@ export default function Main() {
           platform: Platform.OS,
         });
         if (isMounted) {
-          setAppConfigReady(false);
+          setRuntimeConfigReady(false);
           const details = error?.message ? ` ${error.message}` : '';
           const message = `App setup is incomplete. Supabase app-config could not provide the required configuration.${details}`;
           setErrorMessage(message);
@@ -198,11 +198,11 @@ export default function Main() {
   // Configure rewarded ad listeners and preload the next reward.
   useEffect(() => {
     if (adsRemoved) {
-      setAdInitialized(false);
+      setAdSdkInitialized(false);
       return;
     }
-    MobileAds().initialize().then(() => { setAdInitialized(true); }).catch((error) => {
-        setAdInitialized(false);
+    MobileAds().initialize().then(() => { setAdSdkInitialized(true); }).catch((error) => {
+        setAdSdkInitialized(false);
         logError('AdMob SDK initialization failed', error, {
           platform: Platform.OS,
           hasBannerUnitId: Boolean(admobBannerUnitId),
@@ -310,7 +310,7 @@ export default function Main() {
       rewardedRef.current = null;
       return;
     }
-    if (!adInitialized) {
+    if (!adSdkInitialized) {
       setRewardedReady(false);
       setRewardedStatus('sdk_initialising');
       rewardedRef.current = null;
@@ -355,7 +355,7 @@ export default function Main() {
       unsubscribeError();
       setRewardedReady(false);
     };
-  }, [adInitialized, adsRemoved, admobRewardedUnitId]);
+  }, [adSdkInitialized, adsRemoved, admobRewardedUnitId]);
 
   // Show an interstitial after an ending when ready.
   useEffect(() => {
@@ -388,7 +388,7 @@ export default function Main() {
   // Refreshes wallet state after purchases and grants local demo fallback top-ups.
   const refreshBackendWallet = useCallback(async (productId = '') => {
     let refreshedWallet = null;
-    const isCrownPurse = productId === REVENUECAT_PRODUCT_IDS.crownPurse;
+    const purchasedCrownPurse = productId === REVENUECAT_PRODUCT_IDS.crownPurse;
     const previousWallet = refreshDailyCrowns(appBridge.crownWallet || crownWallet || createDefaultCrownWallet());
     const previousTotal = getTotalCrowns(previousWallet);
     if (anonymousUserId) {
@@ -404,13 +404,13 @@ export default function Main() {
         });
       }
     }
-    if (isCrownPurse && (!refreshedWallet || getTotalCrowns(refreshedWallet) < previousTotal + CROWN_PURSE_CROWNS)) {
-      const fallbackBase = refreshedWallet && getTotalCrowns(refreshedWallet) >= previousTotal
+    if (purchasedCrownPurse && (!refreshedWallet || getTotalCrowns(refreshedWallet) < previousTotal + CROWN_PURSE_CROWNS)) {
+      const fallbackWalletBase = refreshedWallet && getTotalCrowns(refreshedWallet) >= previousTotal
         ? refreshedWallet
         : previousWallet;
       refreshedWallet = refreshDailyCrowns({
-        ...fallbackBase,
-        topupCrowns: Number(fallbackBase?.topupCrowns || 0) + CROWN_PURSE_CROWNS,
+        ...fallbackWalletBase,
+        topupCrowns: Number(fallbackWalletBase?.topupCrowns || 0) + CROWN_PURSE_CROWNS,
       });
     }
     if (refreshedWallet) setCrownWallet(refreshedWallet);
@@ -418,13 +418,13 @@ export default function Main() {
   }, [anonymousUserId]);
 
   useEffect(() => {
-    if (screen !== 'removeAdverts') return;
+    if (activeScreen !== 'removeAdverts') return;
     refreshBackendWallet('').catch((error) => {
       logError('Crown shop wallet refresh failed', error, {
         anonymousUserId,
       });
     });
-  }, [anonymousUserId, refreshBackendWallet, screen]);
+  }, [activeScreen, anonymousUserId, refreshBackendWallet]);
 
   // Grants Crowns after a rewarded ad, falling back locally without backend access.
   const grantRewardedCrownsAfterAd = useCallback(async (adReward = null) => {
@@ -465,9 +465,9 @@ export default function Main() {
       });
     }
     setCrownWallet((prev) => {
-      const result = grantRewardedAdCrowns(prev, rewardedCrowns);
-      appBridge.showToast(result.granted ? `${result.crownsGranted} Crowns added.` : 'No rewarded adverts remain today.');
-      return result.wallet;
+      const rewardedGrantResult = grantRewardedAdCrowns(prev, rewardedCrowns);
+      appBridge.showToast(rewardedGrantResult.granted ? `${rewardedGrantResult.crownsGranted} Crowns added.` : 'No rewarded adverts remain today.');
+      return rewardedGrantResult.wallet;
     });
   }, [anonymousUserId]);
 
@@ -559,14 +559,14 @@ export default function Main() {
   appBridge.toastMessage = toastMessage;
   appBridge.showToast = showToast;
 
-  const theme = getSettingTheme(GameScreen?.activeSettingId || defaultSettingId) || {
+  const activeTheme = getSettingTheme(GameScreen?.activeSettingId || defaultSettingId) || {
     background: colors.background,
     header: colors.header,
     footer: colors.footer,
   };
   // Renders the shared banner ad placement for screens that allow ads.
   const renderBannerAd = () => {
-    if (adsRemoved || !adInitialized || !admobBannerUnitId) return null;
+    if (adsRemoved || !adSdkInitialized || !admobBannerUnitId) return null;
     return (
       <View style={styles.bannerContainer}>
         <BannerAd
@@ -592,10 +592,10 @@ export default function Main() {
     );
   };
 
-  if (screen === 'settings') {
+  if (activeScreen === 'settings') {
     return (
       <SettingsScreen
-        theme={theme}
+        theme={activeTheme}
         renderBannerAd={renderBannerAd}
         appSettings={appSettings}
         onSettingsChange={setAppSettings}
@@ -603,10 +603,10 @@ export default function Main() {
     );
   }
 
-  if (screen === 'removeAdverts') {
+  if (activeScreen === 'removeAdverts') {
     return (
       <RemoveAdvertsScreen
-        theme={theme}
+        theme={activeTheme}
         renderBannerAd={renderBannerAd}
         crownWallet={crownWallet}
         adsRemoved={adsRemoved}
@@ -624,11 +624,11 @@ export default function Main() {
     );
   }
 
-  if (screen === 'relationships') {
+  if (activeScreen === 'relationships') {
 
     return (
       <RelationshipsScreen
-        theme={theme}
+        theme={activeTheme}
         getRelationshipBorderColor={getRelationshipBorderColor}
         getRelationshipLabel={getRelationshipLabel}
         renderBannerAd={renderBannerAd}
@@ -638,7 +638,7 @@ export default function Main() {
 
   return (
     <GameScreen
-      theme={theme}
+      theme={activeTheme}
       defaultSettingId={defaultSettingId}
       getSettingTheme={getSettingTheme}
       errorMessage={errorMessage}
@@ -648,7 +648,7 @@ export default function Main() {
       anonymousUserId={anonymousUserId}
       crownWallet={crownWallet}
       setCrownWallet={setCrownWallet}
-      aiBackendReady={appConfigReady}
+      storyGenerationReady={runtimeConfigReady}
       appSettings={appSettings}
     />
   );

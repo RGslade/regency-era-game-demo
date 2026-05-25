@@ -56,13 +56,13 @@ const titleCaseName = (value) => String(value || '')
 
 // Resolves backend character identifiers into display-ready names.
 const resolveCharacterName = (name, majorCharacters = {}) => {
-  const cleanedName = String(name || '').trim();
-  if (!cleanedName) return '';
-  const majorCharacter = Object.values(majorCharacters || {}).find((character) => {
-    return character?.id === cleanedName || character?.fullName === cleanedName;
+  const characterName = String(name || '').trim();
+  if (!characterName) return '';
+  const matchingMajorCharacter = Object.values(majorCharacters || {}).find((character) => {
+    return character?.id === characterName || character?.fullName === characterName;
   });
-  if (majorCharacter?.fullName) return majorCharacter.fullName;
-  return cleanedName.includes('_') ? titleCaseName(cleanedName) : cleanedName;
+  if (matchingMajorCharacter?.fullName) return matchingMajorCharacter.fullName;
+  return characterName.includes('_') ? titleCaseName(characterName) : characterName;
 };
 
 const resolveCharacterList = (names = [], playerName = '', majorCharacters = {}) => {
@@ -75,12 +75,12 @@ const resolveCharacterList = (names = [], playerName = '', majorCharacters = {})
 };
 
 const resolveCharacterScoreMap = (entries = {}, playerName = '', majorCharacters = {}) => {
-  const next = {};
+  const resolvedScores = {};
   Object.entries(entries || {}).forEach(([name, score]) => {
     const resolvedName = resolveCharacterName(name, majorCharacters);
-    if (resolvedName && !isPlayerName(resolvedName, playerName)) next[resolvedName] = score;
+    if (resolvedName && !isPlayerName(resolvedName, playerName)) resolvedScores[resolvedName] = score;
   });
-  return next;
+  return resolvedScores;
 };
 
 const capitalizeStoryText = (text = '') => {
@@ -92,10 +92,10 @@ const capitalizeStoryText = (text = '') => {
 
 const sanitizeChoiceForPlayer = (choice = null, playerName = '', majorCharacters = {}) => {
   if (!choice) return choice;
-  const target = choice.targetCharacter || choice.character || null;
-  const resolvedTarget = resolveCharacterName(target, majorCharacters);
-  if (!isPlayerName(resolvedTarget || target, playerName)) {
-    return resolvedTarget && resolvedTarget !== target
+  const choiceTargetCharacter = choice.targetCharacter || choice.character || null;
+  const resolvedTarget = resolveCharacterName(choiceTargetCharacter, majorCharacters);
+  if (!isPlayerName(resolvedTarget || choiceTargetCharacter, playerName)) {
+    return resolvedTarget && resolvedTarget !== choiceTargetCharacter
       ? { ...choice, targetCharacter: resolvedTarget, character: resolvedTarget }
       : choice;
   }
@@ -269,21 +269,21 @@ const buildPlaceColorSnapshot = (sessionPlaces = {}, activeSettingId = fallbackS
 };
 
 const applyHiddenStatDeltas = (stats = {}, deltas = {}) => {
-  const next = { ...stats };
+  const updatedStats = { ...stats };
   Object.entries(deltas || {}).forEach(([key, delta]) => {
-    next[key] = Number(next[key] || 0) + Number(delta || 0);
+    updatedStats[key] = Number(updatedStats[key] || 0) + Number(delta || 0);
   });
-  return next;
+  return updatedStats;
 };
 
 const normalizeAiChoices = (choices = [], playerName = '', majorCharacters = {}, currentLocationId = fallbackSettingId) =>
   choices.map((choice, index) => {
-    const target = choice.targetCharacter || choice.character || null;
-    const resolvedTarget = resolveCharacterName(target, majorCharacters);
+    const choiceTargetCharacter = choice.targetCharacter || choice.character || null;
+    const resolvedTarget = resolveCharacterName(choiceTargetCharacter, majorCharacters);
     return {
       text: choice.text || `Choice ${index + 1}`,
       next: choice.endingCandidate || `ai_turn_${Date.now()}_${index}`,
-      character: isPlayerName(resolvedTarget || target, playerName) ? null : resolvedTarget || target,
+      character: isPlayerName(resolvedTarget || choiceTargetCharacter, playerName) ? null : resolvedTarget || choiceTargetCharacter,
       relationship: Number(choice.relationshipDelta || 0),
       effectType: choice.effectType || 'risk',
       riskDelta: Number(choice.riskDelta || 0),
@@ -323,7 +323,7 @@ export const GameScreen = ({
   anonymousUserId,
   crownWallet,
   setCrownWallet,
-  aiBackendReady = false,
+  storyGenerationReady = false,
   appSettings = {},
 }) => {
   const [currentSettingId, setCurrentSettingId] = useState(defaultSettingId);
@@ -415,21 +415,21 @@ export const GameScreen = ({
 
   const applyRelationship = useCallback((delta, character) => {
     setGameState((prev) => {
-      const nextOverall = Math.max(MIN_RELATIONSHIP, Math.min(MAX_RELATIONSHIP, prev.relationship + delta));
+      const nextOverallRelationshipScore = Math.max(MIN_RELATIONSHIP, Math.min(MAX_RELATIONSHIP, prev.relationship + delta));
       const resolvedCharacter = resolveCharacterName(character, prev.majorCharacters);
-      if (!resolvedCharacter || isPlayerName(resolvedCharacter, prev.playerName)) return { ...prev, relationship: nextOverall };
-      const currentScore = prev.characterScores?.[resolvedCharacter] ?? prev.characterScores?.[character] ?? NEUTRAL_RELATIONSHIP;
-      const nextScore = Math.max(MIN_RELATIONSHIP, Math.min(MAX_RELATIONSHIP, currentScore + delta));
+      if (!resolvedCharacter || isPlayerName(resolvedCharacter, prev.playerName)) return { ...prev, relationship: nextOverallRelationshipScore };
+      const currentCharacterScore = prev.characterScores?.[resolvedCharacter] ?? prev.characterScores?.[character] ?? NEUTRAL_RELATIONSHIP;
+      const nextCharacterScore = Math.max(MIN_RELATIONSHIP, Math.min(MAX_RELATIONSHIP, currentCharacterScore + delta));
       return {
         ...prev,
-        relationship: nextOverall,
+        relationship: nextOverallRelationshipScore,
         characterScores: {
           ...prev.characterScores,
-          [resolvedCharacter]: nextScore,
+          [resolvedCharacter]: nextCharacterScore,
         },
         relationships: {
           ...prev.relationships,
-          [resolvedCharacter]: nextScore,
+          [resolvedCharacter]: nextCharacterScore,
         },
       };
     });
@@ -484,7 +484,7 @@ export const GameScreen = ({
         characterScores: nextScores,
         relationships: nextRelationships,
         lastSettingId: settingId,
-        turnCount: Number(prev.turnCount || 0) + (isNewGame ? 1 : 1),
+        turnCount: Number(prev.turnCount || 0) + 1,
         majorCharactersSeen: nextMajorSeen,
         lastAiSource: source,
       };
@@ -521,23 +521,23 @@ export const GameScreen = ({
     }
     let spent = false;
     setCrownWallet?.((prev) => {
-      const result = spendOneCrown(prev);
-      spent = result.spent;
-      return result.wallet;
+      const spendResult = spendOneCrown(prev);
+      spent = spendResult.spent;
+      return spendResult.wallet;
     });
     return spent;
   }, [setCrownWallet]);
 
   const requestAiTurn = useCallback(async ({ choice = null, isNewGame = false, stateOverride = null } = {}) => {
-    const state = normalizeSceneState(stateOverride || gameState);
-    const requestChoice = sanitizeChoiceForPlayer(choice, state.playerName, state.majorCharacters);
-    if (!aiBackendReady) {
-      const message = 'The AI backend is not ready. Supabase app-config must return a valid openAiModel before the story can continue.';
+    const storyStateForRequest = normalizeSceneState(stateOverride || gameState);
+    const requestChoice = sanitizeChoiceForPlayer(choice, storyStateForRequest.playerName, storyStateForRequest.majorCharacters);
+    if (!storyGenerationReady) {
+      const message = 'Story generation is not ready. Supabase app-config must return the required runtime configuration before the story can continue.';
       setPendingSceneMessage(false);
-      logError('AI story turn blocked because app config is incomplete', new Error(message), {
+      logError('Story turn blocked because app config is incomplete', new Error(message), {
         isNewGame,
-        currentScene: state.currentScene,
-        turnCount: state.turnCount,
+        currentScene: storyStateForRequest.currentScene,
+        turnCount: storyStateForRequest.turnCount,
       });
       appBridge.setErrorMessage(message);
       return;
@@ -548,26 +548,26 @@ export const GameScreen = ({
     }
     try {
       setPendingSceneMessage(true);
-      const result = await generateAiStoryTurn({
+      const storyTurnResult = await generateAiStoryTurn({
         anonymousUserId,
-        gameState: state,
+        gameState: storyStateForRequest,
         choice: requestChoice,
         isNewGame,
         wallet: crownWallet,
       });
-      spendCrownAfterValidScene(result.wallet, result.source);
-      showGeneratedScene(result.scene, result.source, requestChoice, isNewGame, state);
+      spendCrownAfterValidScene(storyTurnResult.wallet, storyTurnResult.source);
+      showGeneratedScene(storyTurnResult.scene, storyTurnResult.source, requestChoice, isNewGame, storyStateForRequest);
       appBridge.setErrorMessage('');
     } catch (error) {
       setPendingSceneMessage(false);
       logError('AI story turn failed', error, {
         isNewGame,
-        currentScene: state.currentScene,
-        turnCount: state.turnCount,
+        currentScene: storyStateForRequest.currentScene,
+        turnCount: storyStateForRequest.turnCount,
       });
       appBridge.setErrorMessage(buildUserErrorMessage('The story could not continue. Please try again.', error));
     }
-  }, [aiBackendReady, anonymousUserId, crownWallet, gameState, showGeneratedScene, spendCrownAfterValidScene]);
+  }, [anonymousUserId, crownWallet, gameState, showGeneratedScene, spendCrownAfterValidScene, storyGenerationReady]);
 
   const handleChoice = useCallback((choice) => {
     if (getTotalCrowns(crownWallet) <= 0) {
@@ -674,8 +674,8 @@ export const GameScreen = ({
 
   const startFreshStory = useCallback(async () => {
     await resetGameState();
-    const baseState = createInitialState();
-    setGameState(baseState);
+    const initialStoryState = createInitialState();
+    setGameState(initialStoryState);
     setMenuVisible(false);
     setGameOverVisible(false);
     setCurrentSettingId(defaultSettingId);
@@ -686,7 +686,7 @@ export const GameScreen = ({
       sceneTimerRef.current = null;
     }
     playUiCue('newGame');
-    await requestAiTurn({ isNewGame: true, stateOverride: baseState });
+    await requestAiTurn({ isNewGame: true, stateOverride: initialStoryState });
   }, [defaultSettingId, playUiCue, requestAiTurn]);
 
   const handleReset = useCallback(async () => {
@@ -702,16 +702,16 @@ export const GameScreen = ({
   useEffect(() => {
     const hydrate = async () => {
       try {
-        const saved = await loadGameState();
-        if (saved && Array.isArray(saved.history) && saved.history.length > 0) {
-          const state = normalizeSceneState(saved);
-          setGameState(state);
-          setCurrentSettingId(state.lastSettingId || defaultSettingId);
+        const savedGameState = await loadGameState();
+        if (savedGameState && Array.isArray(savedGameState.history) && savedGameState.history.length > 0) {
+          const normalizedSavedState = normalizeSceneState(savedGameState);
+          setGameState(normalizedSavedState);
+          setCurrentSettingId(normalizedSavedState.lastSettingId || defaultSettingId);
         } else if (getTotalCrowns(crownWallet) > 0 || anonymousUserId) {
-          const baseState = createInitialState();
-          setGameState(baseState);
+          const initialStoryState = createInitialState();
+          setGameState(initialStoryState);
           playUiCue('newGame');
-          requestAiTurn({ isNewGame: true, stateOverride: baseState });
+          requestAiTurn({ isNewGame: true, stateOverride: initialStoryState });
         }
       } catch (error) {
         logError('Game state hydration failed', error, {});
@@ -720,10 +720,10 @@ export const GameScreen = ({
         setIsReady(true);
       }
     };
-    if (!isReady && aiBackendReady && (anonymousUserId || getTotalCrowns(crownWallet) > 0)) {
+    if (!isReady && storyGenerationReady && (anonymousUserId || getTotalCrowns(crownWallet) > 0)) {
       hydrate();
     }
-  }, [aiBackendReady, anonymousUserId, crownWallet, defaultSettingId, isReady, playUiCue, requestAiTurn]);
+  }, [anonymousUserId, crownWallet, defaultSettingId, isReady, playUiCue, requestAiTurn, storyGenerationReady]);
 
   useEffect(() => {
     if (!isReady) return;
@@ -735,8 +735,8 @@ export const GameScreen = ({
   }, [gameState, isReady]);
 
   useEffect(() => {
-    const nextTheme = resolveTheme(currentSettingId || defaultSettingId);
-    setBackgroundColors((prev) => ({ from: prev.to, to: nextTheme.background }));
+    const nextSettingTheme = resolveTheme(currentSettingId || defaultSettingId);
+    setBackgroundColors((prev) => ({ from: prev.to, to: nextSettingTheme.background }));
     backgroundAnim.setValue(0);
     Animated.timing(backgroundAnim, {
       toValue: 1,

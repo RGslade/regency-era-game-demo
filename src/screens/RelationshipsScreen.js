@@ -18,14 +18,14 @@ const titleCaseName = (value) => String(value || '')
   .replace(/\s+/g, ' ')
   .replace(/\b\w/g, (letter) => letter.toUpperCase());
 
-const getRelationshipDisplayInfo = (name, majorCharacters = {}) => {
-  const isInMemory = memoryNamePattern.test(String(name || ''));
-  const cleanedName = String(name || '').replace(memoryNamePattern, '').trim();
-  const majorCharacter = Object.values(majorCharacters || {}).find((character) => {
-    return character?.id === cleanedName || character?.fullName === cleanedName;
+const getRelationshipDisplayInfo = (relationshipName, majorCharacters = {}) => {
+  const isInMemory = memoryNamePattern.test(String(relationshipName || ''));
+  const relationshipNameWithoutMemoryTag = String(relationshipName || '').replace(memoryNamePattern, '').trim();
+  const matchingMajorCharacter = Object.values(majorCharacters || {}).find((character) => {
+    return character?.id === relationshipNameWithoutMemoryTag || character?.fullName === relationshipNameWithoutMemoryTag;
   });
   return {
-    displayName: majorCharacter?.fullName || titleCaseName(cleanedName) || name,
+    displayName: matchingMajorCharacter?.fullName || titleCaseName(relationshipNameWithoutMemoryTag) || relationshipName,
     isInMemory,
   };
 };
@@ -40,14 +40,14 @@ export const RelationshipsScreen = ({
   getRelationshipLabel,
   renderBannerAd,
 }) => {
-  const [expandedRelationship, setExpandedRelationship] = useState('');
+  const [expandedRelationshipName, setExpandedRelationshipName] = useState('');
   const [gameState, setGameState] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
     loadGameState()
-      .then((saved) => {
-        if (isMounted) setGameState(saved || null);
+      .then((savedGameState) => {
+        if (isMounted) setGameState(savedGameState || null);
       })
       .catch((error) => {
         logError('Relationships screen state load failed', error, {});
@@ -83,27 +83,27 @@ export const RelationshipsScreen = ({
   const getInteractionWeightProfile = useCallback((score) => {
     return (interactionWeightTable.find((entry) => score >= entry.min && score <= entry.max) || interactionWeightTable[2]);
   }, [interactionWeightTable]);
-  const pickWeightedOptions = useMemo(() => (options, score, seed, count = 3) => { //Its used
-    if (!options || options.length <= count) return options || [];
+  const pickWeightedOptions = useMemo(() => (interactionOptions, score, optionSeed, count = 3) => {
+    if (!interactionOptions || interactionOptions.length <= count) return interactionOptions || [];
     const { weights } = getInteractionWeightProfile(score);
-    const remaining = options.map((option, index) => ({ option, index, weight: weights[getInteractionSentiment(option.delta)] || 0.1, }));
-    const rng = seededRandom(hashStringToInt(seed));
-    const picked = [];
-    while (picked.length < count && remaining.length) {
-      const totalWeight = remaining.reduce((sum, entry) => sum + entry.weight, 0);
-      let roll = rng() * totalWeight;
-      let selectedIndex = remaining.length - 1;
-      for (let i = 0; i < remaining.length; i += 1) {
-        roll -= remaining[i].weight;
-        if (roll <= 0) {
+    const weightedCandidates = interactionOptions.map((option, index) => ({ option, index, weight: weights[getInteractionSentiment(option.delta)] || 0.1, }));
+    const nextRandom = seededRandom(hashStringToInt(optionSeed));
+    const selectedOptions = [];
+    while (selectedOptions.length < count && weightedCandidates.length) {
+      const totalWeight = weightedCandidates.reduce((sum, entry) => sum + entry.weight, 0);
+      let selectedWeightPosition = nextRandom() * totalWeight;
+      let selectedIndex = weightedCandidates.length - 1;
+      for (let i = 0; i < weightedCandidates.length; i += 1) {
+        selectedWeightPosition -= weightedCandidates[i].weight;
+        if (selectedWeightPosition <= 0) {
           selectedIndex = i;
           break;
         }
       }
-      picked.push(remaining[selectedIndex].option);
-      remaining.splice(selectedIndex, 1);
+      selectedOptions.push(weightedCandidates[selectedIndex].option);
+      weightedCandidates.splice(selectedIndex, 1);
     }
-    return picked;
+    return selectedOptions;
   }, [getInteractionWeightProfile]);
 
   const getInteractionSentiment = (delta) => {
@@ -121,17 +121,17 @@ export const RelationshipsScreen = ({
   };
 
   const seededRandom = (seed) => {
-    let current = seed >>> 0;
+    let randomState = seed >>> 0;
     return () => {
-      current = (current * 1664525 + 1013904223) >>> 0;
-      return current / 2 ** 32;
+      randomState = (randomState * 1664525 + 1013904223) >>> 0;
+      return randomState / 2 ** 32;
     };
   };
   const getWeightedInteractionOptions = useCallback(
     (characterName, displayName, score) => {
-      const options = interactionOptionsByCategory[getCharacterCategory(displayName)] || defaultInteractionOptions;
-      const seed = `${gameState?.currentScene || ''}:${characterName}:${score}`;
-      return pickWeightedOptions(options, score, seed, getInteractionOptionCount(score));
+      const categoryInteractionOptions = interactionOptionsByCategory[getCharacterCategory(displayName)] || defaultInteractionOptions;
+      const optionSeed = `${gameState?.currentScene || ''}:${characterName}:${score}`;
+      return pickWeightedOptions(categoryInteractionOptions, score, optionSeed, getInteractionOptionCount(score));
     },
     [gameState?.currentScene, getInteractionOptionCount, pickWeightedOptions]
   );
@@ -142,36 +142,36 @@ export const RelationshipsScreen = ({
         appBridge.showToast('Choose a story option before interacting again.');
         return prev;
       }
-      const currentScore = prev.characterScores?.[characterName] ?? prev.relationships?.[characterName] ?? 20;
-      if (currentScore <= MIN_RELATIONSHIP) {
+      const currentCharacterScore = prev.characterScores?.[characterName] ?? prev.relationships?.[characterName] ?? 20;
+      if (currentCharacterScore <= MIN_RELATIONSHIP) {
         appBridge.showToast(`${displayName} refuses to engage with you.`);
         return prev;
       }
-      const nextScore = Math.max(MIN_RELATIONSHIP, Math.min(MAX_RELATIONSHIP, currentScore + option.delta));
-      const nextOverall = Math.max(MIN_RELATIONSHIP, Math.min(MAX_RELATIONSHIP, Number(prev.relationship || 20) + option.delta));
-      const next = {
+      const nextCharacterScore = Math.max(MIN_RELATIONSHIP, Math.min(MAX_RELATIONSHIP, currentCharacterScore + option.delta));
+      const nextOverallRelationshipScore = Math.max(MIN_RELATIONSHIP, Math.min(MAX_RELATIONSHIP, Number(prev.relationship || 20) + option.delta));
+      const updatedGameState = {
         ...prev,
-        relationship: nextOverall,
+        relationship: nextOverallRelationshipScore,
         relationshipInteractionsRemaining: Math.max(
           0,
           Number(prev.relationshipInteractionsRemaining ?? RELATIONSHIP_INTERACTIONS_PER_AI_TURN) - 1
         ),
         characterScores: {
           ...(prev.characterScores || {}),
-          [characterName]: nextScore,
+          [characterName]: nextCharacterScore,
         },
         relationships: {
           ...(prev.relationships || {}),
-          [characterName]: nextScore,
+          [characterName]: nextCharacterScore,
         },
       };
-      saveGameState(next).catch((error) => {
+      saveGameState(updatedGameState).catch((error) => {
         logError('Relationship interaction save failed', error, {
           characterName,
         });
       });
       appBridge.showToast(option.outcome);
-      return next;
+      return updatedGameState;
     });
   }, []);
   const interactionsRemaining = Number(gameState?.relationshipInteractionsRemaining ?? RELATIONSHIP_INTERACTIONS_PER_AI_TURN);
@@ -198,7 +198,7 @@ export const RelationshipsScreen = ({
           relationshipEntries.map(({ name, displayName, isInMemory, score }) => (
             <View key={name} style={styles.relationshipItem}>
               <TouchableOpacity
-                onPress={() => setExpandedRelationship((prev) => (prev === name ? '' : name))}
+                onPress={() => setExpandedRelationshipName((prev) => (prev === name ? '' : name))}
                 style={[
                   styles.relationshipRow,
                   { borderColor: isInMemory ? colors.relationshipHigh : getRelationshipBorderColor(score) },
@@ -209,7 +209,7 @@ export const RelationshipsScreen = ({
                   {getRelationshipLabel(score)} ({score}/40)
                 </Text>
               </TouchableOpacity>
-              {expandedRelationship === name ? (
+              {expandedRelationshipName === name ? (
                 <View style={styles.relationshipAccordion}>
                   {interactionsRemaining <= 0 ? (
                     <Text style={styles.interactionHint}>

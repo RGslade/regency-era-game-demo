@@ -30,8 +30,8 @@ const omitPlayerEntries = (entries = {}, playerName = '') => {
 
 const sanitizeChoiceForPlayer = (choice = null, playerName = '') => {
   if (!choice) return choice;
-  const target = choice.targetCharacter || choice.character || null;
-  if (!isPlayerName(target, playerName)) return choice;
+  const choiceTargetCharacter = choice.targetCharacter || choice.character || null;
+  if (!isPlayerName(choiceTargetCharacter, playerName)) return choice;
   return {
     ...choice,
     targetCharacter: null,
@@ -179,25 +179,25 @@ const buildFallbackChoice = (text, effectType, relationshipDelta, nextLocationId
 
 // Builds a local scene when the backend is unavailable for demos.
 export const buildLocalAiFallbackScene = ({ gameState = {}, choice = null, isNewGame = false } = {}) => {
-  const knownNames = [
+  const knownCharacterNames = [
     ...(Array.isArray(gameState.currentSceneCharacters) ? gameState.currentSceneCharacters : []),
     ...Object.keys(gameState.relationships || {}),
   ].filter(Boolean);
-  const recurringName = pick(knownNames) || 'Mother';
+  const recurringCharacterName = pick(knownCharacterNames) || 'Mother';
   const currentLocationId = choice?.nextLocationId || gameState.lastSettingId || defaultSettingId;
   const nextSetting = settings.find((setting) => setting.id === currentLocationId) || settings[0];
-  const sideName = `${pick(firstNames)} ${pick(lowSocietySurnames)}`;
+  const temporaryExtraName = `${pick(firstNames)} ${pick(lowSocietySurnames)}`;
   const playerName = gameState.playerName || 'Eleanor';
-  const relationshipTarget = isNewGame ? null : recurringName;
-  const intro = isNewGame
+  const relationshipTarget = isNewGame ? null : recurringCharacterName;
+  const fallbackSceneText = isNewGame
     ? `The morning begins with your name spoken softly at the window: ${playerName}. The day has the restless quality of a sealed letter, and even the ordinary sounds of ${nextSetting.label.toLowerCase()} seem to be waiting for your first move.`
-    : `Your last choice settles over the room like candle smoke. At ${nextSetting.label.toLowerCase()}, ${recurringName} watches closely while ${sideName} passes with news that may alter the shape of the day.`;
+    : `Your last choice settles over the room like candle smoke. At ${nextSetting.label.toLowerCase()}, ${recurringCharacterName} watches closely while ${temporaryExtraName} passes with news that may alter the shape of the day.`;
 
   return {
-    sceneText: intro,
+    sceneText: fallbackSceneText,
     locationId: nextSetting.id,
     charactersPresent: relationshipTarget ? [relationshipTarget] : [],
-    temporaryExtras: [sideName],
+    temporaryExtras: [temporaryExtraName],
     promoteTemporaryCharacter: false,
     hiddenStatDeltas: {
       reputation: 0,
@@ -245,17 +245,17 @@ export const validateAiScene = (scene = {}) => {
 // Converts backend story errors into user-actionable failures.
 const buildStoryBackendError = (status, responseText, requestId = '') => {
   const requestDetails = requestId ? ` Request id: ${requestId}.` : '';
-  let payload = null;
+  let errorPayload = null;
   try {
-    payload = JSON.parse(responseText);
+    errorPayload = JSON.parse(responseText);
   } catch {
-    payload = null;
+    errorPayload = null;
   }
-  if (payload?.code === 'NO_CROWNS') {
-    const error = new Error(`${payload.error || 'No Crowns available.'}${requestDetails}`);
-    error.code = payload.code;
-    error.wallet = payload.wallet || null;
-    error.requestId = payload.requestId || requestId;
+  if (errorPayload?.code === 'NO_CROWNS') {
+    const error = new Error(`${errorPayload.error || 'No Crowns available.'}${requestDetails}`);
+    error.code = errorPayload.code;
+    error.wallet = errorPayload.wallet || null;
+    error.requestId = errorPayload.requestId || requestId;
     return error;
   }
   if (responseText.includes('Unexpected end of JSON input')) {
@@ -288,15 +288,15 @@ export const generateAiStoryTurn = async ({
   });
 
   if (!STORY_FUNCTION_URL || !hasSupabaseFunctionAuth()) {
-    const scene = buildLocalAiFallbackScene({ gameState: requestGameState, choice: requestChoice, isNewGame });
+    const fallbackScene = buildLocalAiFallbackScene({ gameState: requestGameState, choice: requestChoice, isNewGame });
     logWarn('AI story turn using local fallback', {
       requestId,
       reason: !STORY_FUNCTION_URL ? 'missing_story_function_url' : 'missing_or_invalid_supabase_function_auth',
       input: debugInput,
-      output: buildAiDebugOutput(scene, 'local_fallback'),
+      output: buildAiDebugOutput(fallbackScene, 'local_fallback'),
     });
     return {
-      scene,
+      scene: fallbackScene,
       wallet,
       source: 'local_fallback',
     };
@@ -335,16 +335,16 @@ export const generateAiStoryTurn = async ({
     });
     const error = buildStoryBackendError(response.status, errorText, requestId);
     if (error.code === 'NO_CROWNS' && wallet && Number(wallet.freeCrowns || 0) + Number(wallet.rewardedCrowns || 0) + Number(wallet.subscriptionCrowns || 0) + Number(wallet.topupCrowns || 0) > 0) {
-      const scene = buildLocalAiFallbackScene({ gameState: requestGameState, choice: requestChoice, isNewGame });
+      const fallbackScene = buildLocalAiFallbackScene({ gameState: requestGameState, choice: requestChoice, isNewGame });
       logInfo('AI story turn using local fallback because backend wallet is stale', {
         requestId,
         backendWallet: error.wallet,
         localWallet: wallet,
         input: debugInput,
-        output: buildAiDebugOutput(scene, 'local_fallback'),
+        output: buildAiDebugOutput(fallbackScene, 'local_fallback'),
       });
       return {
-        scene,
+        scene: fallbackScene,
         wallet,
         source: 'local_fallback',
       };
@@ -352,43 +352,43 @@ export const generateAiStoryTurn = async ({
     throw error;
   }
 
-  const payload = await response.json();
-  const rawScene = payload?.scene || payload;
-  const scene = rawScene?.locationId === expectedLocationId
-    ? rawScene
+  const storyResponsePayload = await response.json();
+  const returnedScene = storyResponsePayload?.scene || storyResponsePayload;
+  const validatedScene = returnedScene?.locationId === expectedLocationId
+    ? returnedScene
     : {
-        ...rawScene,
+        ...returnedScene,
         locationId: expectedLocationId,
       };
-  if (rawScene?.locationId && rawScene.locationId !== expectedLocationId) {
+  if (returnedScene?.locationId && returnedScene.locationId !== expectedLocationId) {
     logWarn('AI story turn location corrected to expected location', {
       requestId,
-      returnedLocationId: rawScene.locationId,
-      returnedLocationLabel: getSettingLabel(rawScene.locationId),
+      returnedLocationId: returnedScene.locationId,
+      returnedLocationLabel: getSettingLabel(returnedScene.locationId),
       expectedLocationId,
       expectedLocationLabel: getSettingLabel(expectedLocationId),
       selectedChoice: debugInput.selectedChoice,
       lastLocationId: debugInput.lastLocationId,
     });
   }
-  if (!validateAiScene(scene)) {
+  if (!validateAiScene(validatedScene)) {
     logWarn('AI story turn returned invalid scene', {
       requestId,
       input: debugInput,
-      output: buildAiDebugOutput(scene, 'backend_invalid'),
-      rawPayload: payload,
+      output: buildAiDebugOutput(validatedScene, 'backend_invalid'),
+      rawPayload: storyResponsePayload,
     });
     throw new Error('Story generation returned an invalid scene.');
   }
   logInfo('AI story turn backend outcome', {
     requestId,
     input: debugInput,
-    output: buildAiDebugOutput(scene, 'backend'),
-    walletReturned: Boolean(payload?.wallet),
+    output: buildAiDebugOutput(validatedScene, 'backend'),
+    walletReturned: Boolean(storyResponsePayload?.wallet),
   });
   return {
-    scene,
-    wallet: payload?.wallet || wallet,
+    scene: validatedScene,
+    wallet: storyResponsePayload?.wallet || wallet,
     source: 'backend',
   };
 };
@@ -411,8 +411,8 @@ export const fetchBackendCrownWallet = async ({ anonymousUserId } = {}) => {
   if (!response.ok) {
     throw new Error(await response.text());
   }
-  const payload = await response.json();
-  return payload?.wallet || null;
+  const walletPayload = await response.json();
+  return walletPayload?.wallet || null;
 };
 
 // Grants rewarded-ad currency through the backend when configured.
@@ -434,8 +434,8 @@ export const grantBackendRewardedCrowns = async ({ anonymousUserId, adNetworkRec
   if (!response.ok) {
     throw new Error(await response.text());
   }
-  const payload = await response.json();
-  return payload?.wallet || null;
+  const walletPayload = await response.json();
+  return walletPayload?.wallet || null;
 };
 
 // Persists AI quality reports for backend review workflows.
@@ -453,8 +453,8 @@ export const submitBackendAiOutcomeReport = async (report = {}) => {
   if (!response.ok) {
     throw new Error(await response.text());
   }
-  const payload = await response.json();
-  return payload || null;
+  const reportPayload = await response.json();
+  return reportPayload || null;
 };
 
 // Saves player app settings to the optional backend.
@@ -476,8 +476,8 @@ export const syncBackendUserSettings = async ({ anonymousUserId, settings } = {}
   if (!response.ok) {
     throw new Error(await response.text());
   }
-  const payload = await response.json();
-  return payload?.settings || null;
+  const settingsPayload = await response.json();
+  return settingsPayload?.settings || null;
 };
 
 // Loads player app settings from the optional backend.
@@ -498,6 +498,6 @@ export const fetchBackendUserSettings = async ({ anonymousUserId } = {}) => {
   if (!response.ok) {
     throw new Error(await response.text());
   }
-  const payload = await response.json();
-  return payload?.settings || null;
+  const settingsPayload = await response.json();
+  return settingsPayload?.settings || null;
 };

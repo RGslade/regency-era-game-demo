@@ -1,17 +1,15 @@
 import { Platform } from 'react-native';
+import { TestIds } from 'react-native-google-mobile-ads';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 const REVENUECAT_TEST_API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_TEST_API_KEY || '';
 
 export const APP_ENVIRONMENT = __DEV__ ? 'development' : 'production';
-const DEV_CONFIG_ENABLED = APP_ENVIRONMENT === 'development';
-const ADMOB_IOS_BANNER_UNIT_ID = DEV_CONFIG_ENABLED ? process.env.EXPO_PUBLIC_ADMOB_IOS_BANNER_UNIT_ID || '' : '';
-const ADMOB_ANDROID_BANNER_UNIT_ID = DEV_CONFIG_ENABLED ? process.env.EXPO_PUBLIC_ADMOB_ANDROID_BANNER_UNIT_ID || '' : '';
-const ADMOB_IOS_INTERSTITIAL_UNIT_ID = DEV_CONFIG_ENABLED ? process.env.EXPO_PUBLIC_ADMOB_IOS_INTERSTITIAL_UNIT_ID || '' : '';
-const ADMOB_ANDROID_INTERSTITIAL_UNIT_ID = DEV_CONFIG_ENABLED ? process.env.EXPO_PUBLIC_ADMOB_ANDROID_INTERSTITIAL_UNIT_ID || '' : '';
-const ADMOB_IOS_REWARDED_UNIT_ID = DEV_CONFIG_ENABLED ? process.env.EXPO_PUBLIC_ADMOB_IOS_REWARDED_UNIT_ID || '' : '';
-const ADMOB_ANDROID_REWARDED_UNIT_ID = DEV_CONFIG_ENABLED ? process.env.EXPO_PUBLIC_ADMOB_ANDROID_REWARDED_UNIT_ID || '' : '';
+const LOCAL_BUILD_CONFIG_ENABLED = APP_ENVIRONMENT === 'development';
+const LOCAL_BUILD_ADMOB_BANNER_UNIT_ID = LOCAL_BUILD_CONFIG_ENABLED ? process.env.EXPO_PUBLIC_ADMOB_BANNER_UNIT_ID || TestIds.BANNER : '';
+const LOCAL_BUILD_ADMOB_INTERSTITIAL_UNIT_ID = LOCAL_BUILD_CONFIG_ENABLED ? process.env.EXPO_PUBLIC_ADMOB_INTERSTITIAL_UNIT_ID || TestIds.INTERSTITIAL : '';
+const LOCAL_BUILD_ADMOB_REWARDED_UNIT_ID = LOCAL_BUILD_CONFIG_ENABLED ? process.env.EXPO_PUBLIC_ADMOB_REWARDED_UNIT_ID || TestIds.REWARDED : '';
 
 // Normalizes backend base URLs before function paths are appended.
 const normalizeSupabaseUrl = (url) => String(url || '').replace(/\/$/, '');
@@ -48,12 +46,12 @@ export const DEFAULT_APP_CONFIG = {
   openAiModel: '',
   revenueCatIosApiKey: '',
   revenueCatAndroidApiKey: '',
-  admobIosBannerUnitId: ADMOB_IOS_BANNER_UNIT_ID,
-  admobAndroidBannerUnitId: ADMOB_ANDROID_BANNER_UNIT_ID,
-  admobIosInterstitialUnitId: ADMOB_IOS_INTERSTITIAL_UNIT_ID,
-  admobAndroidInterstitialUnitId: ADMOB_ANDROID_INTERSTITIAL_UNIT_ID,
-  admobIosRewardedUnitId: ADMOB_IOS_REWARDED_UNIT_ID,
-  admobAndroidRewardedUnitId: ADMOB_ANDROID_REWARDED_UNIT_ID,
+  admobIosBannerUnitId: LOCAL_BUILD_ADMOB_BANNER_UNIT_ID,
+  admobAndroidBannerUnitId: LOCAL_BUILD_ADMOB_BANNER_UNIT_ID,
+  admobIosInterstitialUnitId: LOCAL_BUILD_ADMOB_INTERSTITIAL_UNIT_ID,
+  admobAndroidInterstitialUnitId: LOCAL_BUILD_ADMOB_INTERSTITIAL_UNIT_ID,
+  admobIosRewardedUnitId: LOCAL_BUILD_ADMOB_REWARDED_UNIT_ID,
+  admobAndroidRewardedUnitId: LOCAL_BUILD_ADMOB_REWARDED_UNIT_ID,
 };
 
 // Converts common Supabase auth failures into actionable developer errors.
@@ -122,17 +120,23 @@ const validateRemoteAppConfig = (config = {}) => {
   }
 };
 
-// Lets local development override ad units without committing private IDs.
-const applyDevelopmentAdMobOverrides = (config = {}) => {
-  if (!DEV_CONFIG_ENABLED) return config;
+// Lets local builds override ad units without committing private IDs.
+const applyLocalBuildAdMobOverrides = (config = {}) => {
+  if (!LOCAL_BUILD_CONFIG_ENABLED) return config;
   return {
     ...config,
-    ...(ADMOB_IOS_BANNER_UNIT_ID ? { admobIosBannerUnitId: ADMOB_IOS_BANNER_UNIT_ID } : {}),
-    ...(ADMOB_ANDROID_BANNER_UNIT_ID ? { admobAndroidBannerUnitId: ADMOB_ANDROID_BANNER_UNIT_ID } : {}),
-    ...(ADMOB_IOS_INTERSTITIAL_UNIT_ID ? { admobIosInterstitialUnitId: ADMOB_IOS_INTERSTITIAL_UNIT_ID } : {}),
-    ...(ADMOB_ANDROID_INTERSTITIAL_UNIT_ID ? { admobAndroidInterstitialUnitId: ADMOB_ANDROID_INTERSTITIAL_UNIT_ID } : {}),
-    ...(ADMOB_IOS_REWARDED_UNIT_ID ? { admobIosRewardedUnitId: ADMOB_IOS_REWARDED_UNIT_ID } : {}),
-    ...(ADMOB_ANDROID_REWARDED_UNIT_ID ? { admobAndroidRewardedUnitId: ADMOB_ANDROID_REWARDED_UNIT_ID } : {}),
+    ...(LOCAL_BUILD_ADMOB_BANNER_UNIT_ID ? {
+      admobIosBannerUnitId: LOCAL_BUILD_ADMOB_BANNER_UNIT_ID,
+      admobAndroidBannerUnitId: LOCAL_BUILD_ADMOB_BANNER_UNIT_ID,
+    } : {}),
+    ...(LOCAL_BUILD_ADMOB_INTERSTITIAL_UNIT_ID ? {
+      admobIosInterstitialUnitId: LOCAL_BUILD_ADMOB_INTERSTITIAL_UNIT_ID,
+      admobAndroidInterstitialUnitId: LOCAL_BUILD_ADMOB_INTERSTITIAL_UNIT_ID,
+    } : {}),
+    ...(LOCAL_BUILD_ADMOB_REWARDED_UNIT_ID ? {
+      admobIosRewardedUnitId: LOCAL_BUILD_ADMOB_REWARDED_UNIT_ID,
+      admobAndroidRewardedUnitId: LOCAL_BUILD_ADMOB_REWARDED_UNIT_ID,
+    } : {}),
   };
 };
 
@@ -151,7 +155,7 @@ export const loadRemoteAppConfig = async () => {
   if (!response.ok) {
     throw buildSupabaseFunctionError('app-config', await response.text());
   }
-  const config = applyDevelopmentAdMobOverrides({
+  const config = applyLocalBuildAdMobOverrides({
     ...DEFAULT_APP_CONFIG,
     ...(await response.json()),
   });

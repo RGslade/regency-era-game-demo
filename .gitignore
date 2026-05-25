@@ -3,6 +3,7 @@ node_modules/
 .expo-shared/
 .env.*
 .env
+!.env.example
 *.jks
 *.keystore
 google-services.json

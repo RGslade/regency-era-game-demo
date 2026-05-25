@@ -11,11 +11,11 @@ export const SettingsScreen = ({
   appSettings = createDefaultAppSettings(),
   onSettingsChange = () => {},
 }) => {
-  const updateSetting = (key, value) => {
+  const updateSetting = (settingKey, settingValue) => {
     onSettingsChange({
       ...createDefaultAppSettings(),
       ...appSettings,
-      [key]: value,
+      [settingKey]: settingValue,
     });
   };
 

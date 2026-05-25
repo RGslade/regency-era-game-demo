@@ -36,32 +36,32 @@ const isOlderThanDay = (isoDate) => {
 
 // Refreshes daily free Crowns and rewarded-ad availability windows.
 export const refreshDailyCrowns = (wallet = createDefaultCrownWallet()) => {
-  const next = { ...createDefaultCrownWallet(), ...wallet };
+  const refreshedWallet = { ...createDefaultCrownWallet(), ...wallet };
   const now = new Date().toISOString();
-  if (isOlderThanDay(next.freeGrantedAt)) {
-    next.freeCrowns = FREE_DAILY_CROWNS;
-    next.freeGrantedAt = now;
+  if (isOlderThanDay(refreshedWallet.freeGrantedAt)) {
+    refreshedWallet.freeCrowns = FREE_DAILY_CROWNS;
+    refreshedWallet.freeGrantedAt = now;
   }
-  if (isOlderThanDay(next.rewardedWindowStartedAt)) {
-    next.rewardedCrowns = 0;
-    next.rewardedAdsWatchedToday = 0;
-    next.rewardedWindowStartedAt = now;
+  if (isOlderThanDay(refreshedWallet.rewardedWindowStartedAt)) {
+    refreshedWallet.rewardedCrowns = 0;
+    refreshedWallet.rewardedAdsWatchedToday = 0;
+    refreshedWallet.rewardedWindowStartedAt = now;
   }
-  return next;
+  return refreshedWallet;
 };
 
 // Adds Crowns after a rewarded ad while enforcing the daily cap.
 export const grantRewardedAdCrowns = (wallet = createDefaultCrownWallet(), crownAmount = REWARDED_AD_CROWNS) => {
-  const next = refreshDailyCrowns(wallet);
-  if ((next.rewardedAdsWatchedToday || 0) >= MAX_REWARDED_ADS_PER_DAY) {
-    return { wallet: next, granted: false, crownsGranted: 0 };
+  const refreshedWallet = refreshDailyCrowns(wallet);
+  if ((refreshedWallet.rewardedAdsWatchedToday || 0) >= MAX_REWARDED_ADS_PER_DAY) {
+    return { wallet: refreshedWallet, granted: false, crownsGranted: 0 };
   }
   const crownsGranted = Math.max(0, Number(crownAmount || REWARDED_AD_CROWNS));
   return {
     wallet: {
-      ...next,
-      rewardedCrowns: Number(next.rewardedCrowns || 0) + crownsGranted,
-      rewardedAdsWatchedToday: Number(next.rewardedAdsWatchedToday || 0) + 1,
+      ...refreshedWallet,
+      rewardedCrowns: Number(refreshedWallet.rewardedCrowns || 0) + crownsGranted,
+      rewardedAdsWatchedToday: Number(refreshedWallet.rewardedAdsWatchedToday || 0) + 1,
     },
     granted: true,
     crownsGranted,
@@ -70,55 +70,55 @@ export const grantRewardedAdCrowns = (wallet = createDefaultCrownWallet(), crown
 
 // Spends one Crown from the oldest/free-est eligible bucket first.
 export const spendOneCrown = (wallet = createDefaultCrownWallet()) => {
-  const next = refreshDailyCrowns(wallet);
-  const buckets = ['freeCrowns', 'rewardedCrowns', 'subscriptionCrowns', 'topupCrowns'];
-  for (const bucket of buckets) {
-    if (Number(next[bucket] || 0) > 0) {
+  const refreshedWallet = refreshDailyCrowns(wallet);
+  const spendPriorityBuckets = ['freeCrowns', 'rewardedCrowns', 'subscriptionCrowns', 'topupCrowns'];
+  for (const bucket of spendPriorityBuckets) {
+    if (Number(refreshedWallet[bucket] || 0) > 0) {
       return {
         wallet: {
-          ...next,
-          [bucket]: Number(next[bucket] || 0) - 1,
+          ...refreshedWallet,
+          [bucket]: Number(refreshedWallet[bucket] || 0) - 1,
         },
         spent: true,
       };
     }
   }
-  return { wallet: next, spent: false };
+  return { wallet: refreshedWallet, spent: false };
 };
 
 // Applies subscription grants and avoids double-granting the same period.
 export const applySubscriptionTier = (wallet = createDefaultCrownWallet(), tier = 'free', periodEnd = null) => {
-  const next = refreshDailyCrowns(wallet);
-  const currentTier = next.subscriptionTier || 'free';
-  const grantKey = tier === 'free' ? null : `${tier}:${periodEnd || 'current'}`;
-  if (tier === currentTier && next.subscriptionPeriodEnd === periodEnd) {
-    return next;
+  const refreshedWallet = refreshDailyCrowns(wallet);
+  const previousSubscriptionTier = refreshedWallet.subscriptionTier || 'free';
+  const subscriptionGrantKey = tier === 'free' ? null : `${tier}:${periodEnd || 'current'}`;
+  if (tier === previousSubscriptionTier && refreshedWallet.subscriptionPeriodEnd === periodEnd) {
+    return refreshedWallet;
   }
   if (tier === 'free') {
     return {
-      ...next,
+      ...refreshedWallet,
       subscriptionTier: 'free',
       subscriptionPeriodEnd: null,
     };
   }
-  const crownsToGrant =
+  const monthlyCrownsToGrant =
     tier === 'court_favourite'
       ? COURT_FAVOURITE_MONTHLY_CROWNS
       : tier === 'society_patron'
         ? SOCIETY_PATRON_MONTHLY_CROWNS
         : 0;
-  const shouldGrantCrowns = grantKey !== next.subscriptionGrantKey;
+  const shouldGrantCrowns = subscriptionGrantKey !== refreshedWallet.subscriptionGrantKey;
   return {
-    ...next,
+    ...refreshedWallet,
     subscriptionTier: tier,
-    subscriptionCrowns: Number(next.subscriptionCrowns || 0) + (shouldGrantCrowns ? crownsToGrant : 0),
+    subscriptionCrowns: Number(refreshedWallet.subscriptionCrowns || 0) + (shouldGrantCrowns ? monthlyCrownsToGrant : 0),
     subscriptionPeriodEnd: periodEnd,
-    subscriptionGrantKey: grantKey,
+    subscriptionGrantKey,
   };
 };
 
 // Reports how many rewarded ads remain in the current daily window.
 export const getRewardedAdsRemaining = (wallet = createDefaultCrownWallet()) => {
-  const next = refreshDailyCrowns(wallet);
-  return Math.max(0, MAX_REWARDED_ADS_PER_DAY - Number(next.rewardedAdsWatchedToday || 0));
+  const refreshedWallet = refreshDailyCrowns(wallet);
+  return Math.max(0, MAX_REWARDED_ADS_PER_DAY - Number(refreshedWallet.rewardedAdsWatchedToday || 0));
 };

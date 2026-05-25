@@ -6,13 +6,13 @@ import { appStyles as styles } from '../styles/appStyles';
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const isWordToken = (value) => /^[A-Za-z0-9 ]+$/.test(value);
 const splitByNames = (text, nameColors, placeColors) => {
-  const names = Object.keys(nameColors || {});
-  const places = Object.keys(placeColors || {});
-  if (!text || (names.length === 0 && places.length === 0)) {
+  const highlightedNameTokens = Object.keys(nameColors || {});
+  const highlightedPlaceTokens = Object.keys(placeColors || {});
+  if (!text || (highlightedNameTokens.length === 0 && highlightedPlaceTokens.length === 0)) {
     return [{ text, color: null, backgroundColor: null }];
   }
-  const tokens = [...names, ...places].filter(Boolean);
-  if (tokens.length === 0) {
+  const highlightTokens = [...highlightedNameTokens, ...highlightedPlaceTokens].filter(Boolean);
+  if (highlightTokens.length === 0) {
     return [{ text, color: null, backgroundColor: null }];
   }
   const nameColorByToken = Object.fromEntries(
@@ -21,36 +21,36 @@ const splitByNames = (text, nameColors, placeColors) => {
   const placeColorByToken = Object.fromEntries(
     Object.entries(placeColors || {}).map(([token, color]) => [token.toLowerCase(), color])
   );
-  const pattern = tokens
+  const highlightPattern = highlightTokens
     .sort((a, b) => b.length - a.length)
     .map((token) => {
       const escaped = escapeRegExp(token);
       return isWordToken(token) ? `\\b${escaped}\\b` : escaped;
     })
     .join('|');
-  if (!pattern) {
+  if (!highlightPattern) {
     return [{ text, color: null, backgroundColor: null }];
   }
-  const regex = new RegExp(`(${pattern})`, 'gi');
-  const parts = [];
+  const highlightRegex = new RegExp(`(${highlightPattern})`, 'gi');
+  const highlightedSegments = [];
   let lastIndex = 0;
-  let match = regex.exec(text);
-  while (match) {
-    if (match.index > lastIndex) {
-      parts.push({ text: text.slice(lastIndex, match.index), color: null, backgroundColor: null });
+  let highlightMatch = highlightRegex.exec(text);
+  while (highlightMatch) {
+    if (highlightMatch.index > lastIndex) {
+      highlightedSegments.push({ text: text.slice(lastIndex, highlightMatch.index), color: null, backgroundColor: null });
     }
-    const token = match[0];
+    const token = highlightMatch[0];
     const normalizedToken = token.toLowerCase();
     const backgroundColor = placeColorByToken[normalizedToken] || null;
     const color = backgroundColor ? colors.text : nameColorByToken[normalizedToken] || null;
-    parts.push({ text: token, color, backgroundColor });
-    lastIndex = match.index + match[0].length;
-    match = regex.exec(text);
+    highlightedSegments.push({ text: token, color, backgroundColor });
+    lastIndex = highlightMatch.index + highlightMatch[0].length;
+    highlightMatch = highlightRegex.exec(text);
   }
   if (lastIndex < text.length) {
-    parts.push({ text: text.slice(lastIndex), color: null, backgroundColor: null });
+    highlightedSegments.push({ text: text.slice(lastIndex), color: null, backgroundColor: null });
   }
-  return parts;
+  return highlightedSegments;
 };
 
 export const MessageBubble = ({ message, onTypingComplete, onLayout, skipSignal, textSize = 15, fontFamily = 'serif', messageCount }) => {
@@ -64,7 +64,6 @@ export const MessageBubble = ({ message, onTypingComplete, onLayout, skipSignal,
     message.type === 'game' && message.animate ? '' : messageText
   );
   const skipVersionRef = useRef(skipSignal);
-  const msgCount = useRef(messageCount);
 
   // Fade and slide the bubble in on mount.
   useEffect(() => {
@@ -160,7 +159,7 @@ export const MessageBubble = ({ message, onTypingComplete, onLayout, skipSignal,
         <Text style={styles.choiceArchiveLabel}>Your choice</Text>
       ) : (
         <>
-          {msgCount > 0 && <View style={styles.storyEntryRule} />}
+          {messageCount > 0 && <View style={styles.storyEntryRule} />}
         </>
       )}
       <Animated.Text style={[styles.messageText, { opacity: textOpacity, fontSize: textSize, fontFamily }]}>

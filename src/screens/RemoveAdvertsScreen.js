@@ -131,13 +131,15 @@ export const RemoveAdvertsScreen = ({
   }, [purchaseCuePlayer, soundEnabled]);
 
   const handleCustomerInfo = useCallback((customerInfo) => {
-    const active = customerInfo?.entitlements?.active || {};
-    const tier = active[REVENUECAT_ENTITLEMENTS.courtFavourite]
+    const activeEntitlements = customerInfo?.entitlements?.active || {};
+    const purchasedSubscriptionTier = activeEntitlements[REVENUECAT_ENTITLEMENTS.courtFavourite]
       ? 'court_favourite'
-      : active[REVENUECAT_ENTITLEMENTS.societyPatron]
+      : activeEntitlements[REVENUECAT_ENTITLEMENTS.societyPatron]
         ? 'society_patron'
         : 'free';
-    const entitlement = active[REVENUECAT_ENTITLEMENTS.courtFavourite] || active[REVENUECAT_ENTITLEMENTS.societyPatron];
+    const activeSubscriptionEntitlement =
+      activeEntitlements[REVENUECAT_ENTITLEMENTS.courtFavourite] ||
+      activeEntitlements[REVENUECAT_ENTITLEMENTS.societyPatron];
     const revenueCatAppUserId = customerInfo?.originalAppUserId || null;
     if (anonymousUserId && revenueCatAppUserId && revenueCatAppUserId !== anonymousUserId) {
       logWarn('RevenueCat App User ID does not match local Supabase wallet user', {
@@ -154,14 +156,14 @@ export const RemoveAdvertsScreen = ({
       platform: Platform.OS,
       anonymousUserId,
       revenueCatAppUserId,
-      tier,
-      adsRemoved: tier !== 'free',
+      tier: purchasedSubscriptionTier,
+      adsRemoved: purchasedSubscriptionTier !== 'free',
       customerInfo: summarizeCustomerInfo(customerInfo),
     });
     onCustomerInfo?.({
-      tier,
-      periodEnd: entitlement?.expirationDate || null,
-      adsRemoved: tier !== 'free',
+      tier: purchasedSubscriptionTier,
+      periodEnd: activeSubscriptionEntitlement?.expirationDate || null,
+      adsRemoved: purchasedSubscriptionTier !== 'free',
     });
   }, [anonymousUserId, appEnvironment, onCustomerInfo, revenueCatApiKeySource]);
 
@@ -199,30 +201,30 @@ export const RemoveAdvertsScreen = ({
         handleCustomerInfo(customerInfo);
         const offerings = await Purchases.getOfferings();
         const defaultOffering = offerings?.all?.default || offerings?.current;
-        const packages = defaultOffering?.availablePackages || [];
+        const availablePackages = defaultOffering?.availablePackages || [];
         logInfo('RevenueCat offerings fetched', {
           environment: appEnvironment,
           keySource: revenueCatApiKeySource,
           currentOfferingIdentifier: offerings?.current?.identifier || null,
           offeringIdentifiers: Object.keys(offerings?.all || {}),
-          packages: packages.map((pkg) => ({
+          packages: availablePackages.map((pkg) => ({
             identifier: pkg?.identifier || null,
             packageType: pkg?.packageType || null,
             product: summarizeProduct(pkg?.product),
           })),
         });
-        const mapped = {};
-        packages.forEach((pkg) => {
+        const packagesById = {};
+        availablePackages.forEach((pkg) => {
           const productId = pkg?.product?.identifier || pkg?.identifier;
-          if (productId) mapped[productId] = pkg;
+          if (productId) packagesById[productId] = pkg;
         });
         const storeProducts = await Purchases.getProducts(
           [REVENUECAT_PRODUCT_IDS.crownPurse],
           Purchases.PRODUCT_CATEGORY.NON_SUBSCRIPTION
         );
-        const mappedStoreProducts = {};
+        const storeProductsByProductId = {};
         storeProducts.forEach((product) => {
-          if (product?.identifier) mappedStoreProducts[product.identifier] = product;
+          if (product?.identifier) storeProductsByProductId[product.identifier] = product;
         });
         logInfo('RevenueCat store products fetched', {
           environment: appEnvironment,
@@ -231,8 +233,8 @@ export const RemoveAdvertsScreen = ({
           localeCurrencyNote: 'RevenueCat priceString is supplied by the store and should already match the user storefront locale.',
         });
         if (isMounted) {
-          setPackagesByProductId(mapped);
-          setStoreProductsById(mappedStoreProducts);
+          setPackagesByProductId(packagesById);
+          setStoreProductsById(storeProductsByProductId);
           setPurchasesReady(true);
         }
       } catch (error) {
@@ -263,19 +265,19 @@ export const RemoveAdvertsScreen = ({
   }, [anonymousUserId, appEnvironment, handleCustomerInfo, hasAnonymousUserId, hasRevenueCatKey, revenueCatApiKey, revenueCatApiKeySource]);
 
   const purchaseProduct = useCallback(async (planKey) => {
-    const plan = purchasePlans[planKey];
-    const productPackage = packagesByProductId[plan.productId];
-    const storeProduct = storeProductsById[plan.productId];
-    const purchaseTarget = plan.purchaseType === 'store_product' ? storeProduct : productPackage;
+    const selectedPlan = purchasePlans[planKey];
+    const subscriptionPackage = packagesByProductId[selectedPlan.productId];
+    const crownPurseStoreProduct = storeProductsById[selectedPlan.productId];
+    const purchaseTarget = selectedPlan.purchaseType === 'store_product' ? crownPurseStoreProduct : subscriptionPackage;
     if (!purchasesReady || !purchaseTarget) {
       logWarn('RevenueCat purchase blocked; target unavailable', {
         environment: appEnvironment,
         keySource: revenueCatApiKeySource,
         planKey,
-        productId: plan.productId,
+        productId: selectedPlan.productId,
         purchasesReady,
-        hasProductPackage: Boolean(productPackage),
-        hasStoreProduct: Boolean(storeProduct),
+        hasProductPackage: Boolean(subscriptionPackage),
+        hasStoreProduct: Boolean(crownPurseStoreProduct),
       });
       appBridge.showToast('Purchases are not ready yet. Check RevenueCat setup.');
       return;
@@ -289,35 +291,35 @@ export const RemoveAdvertsScreen = ({
         environment: appEnvironment,
         keySource: revenueCatApiKeySource,
         planKey,
-        productId: plan.productId,
-        purchaseType: plan.purchaseType,
+        productId: selectedPlan.productId,
+        purchaseType: selectedPlan.purchaseType,
         anonymousUserId,
       });
-      const result = plan.purchaseType === 'store_product'
-        ? await Purchases.purchaseStoreProduct(storeProduct)
-        : await Purchases.purchasePackage(productPackage);
-      const refreshedWallet = await onPurchaseComplete?.(plan.productId);
+      const purchaseResult = selectedPlan.purchaseType === 'store_product'
+        ? await Purchases.purchaseStoreProduct(crownPurseStoreProduct)
+        : await Purchases.purchasePackage(subscriptionPackage);
+      const refreshedWallet = await onPurchaseComplete?.(selectedPlan.productId);
       logInfo('RevenueCat purchase completed', {
         environment: appEnvironment,
         keySource: revenueCatApiKeySource,
         planKey,
-        productId: plan.productId,
+        productId: selectedPlan.productId,
         anonymousUserId,
-        customerInfo: summarizeCustomerInfo(result?.customerInfo),
+        customerInfo: summarizeCustomerInfo(purchaseResult?.customerInfo),
         walletRefreshed: Boolean(refreshedWallet),
       });
-      handleCustomerInfo(result?.customerInfo);
+      handleCustomerInfo(purchaseResult?.customerInfo);
       playPurchaseCue();
       if (planKey === 'crown_purse') {
-        const refreshedTotal = getTotalCrowns(refreshedWallet || crownWallet);
-        appBridge.showToast(`A purse of ${CROWN_PURSE_CROWNS} Crowns has been placed in your keeping. Balance: ${refreshedTotal}.`);
+        const refreshedCrownTotal = getTotalCrowns(refreshedWallet || crownWallet);
+        appBridge.showToast(`A purse of ${CROWN_PURSE_CROWNS} Crowns has been placed in your keeping. Balance: ${refreshedCrownTotal}.`);
       } else {
         appBridge.showToast('Your patronage is accepted. Crowns refreshed and adverts dismissed.');
       }
     } catch (error) {
       if (!error?.userCancelled) {
         logError('Crown shop purchase failed', error, {
-          productId: plan.productId,
+          productId: selectedPlan.productId,
           environment: appEnvironment,
           keySource: revenueCatApiKeySource,
           anonymousUserId,
@@ -328,7 +330,7 @@ export const RemoveAdvertsScreen = ({
           environment: appEnvironment,
           keySource: revenueCatApiKeySource,
           planKey,
-          productId: plan.productId,
+          productId: selectedPlan.productId,
         });
       }
       await onPurchaseComplete?.('');
@@ -354,20 +356,20 @@ export const RemoveAdvertsScreen = ({
         keySource: revenueCatApiKeySource,
         anonymousUserId,
       });
-      const customerInfo = await Purchases.restorePurchases();
-      const active = customerInfo?.entitlements?.active || {};
-      const tier = active[REVENUECAT_ENTITLEMENTS.courtFavourite]
+      const restoredCustomerInfo = await Purchases.restorePurchases();
+      const restoredActiveEntitlements = restoredCustomerInfo?.entitlements?.active || {};
+      const restoredSubscriptionProductId = restoredActiveEntitlements[REVENUECAT_ENTITLEMENTS.courtFavourite]
         ? REVENUECAT_PRODUCT_IDS.courtFavourite
-        : active[REVENUECAT_ENTITLEMENTS.societyPatron]
+        : restoredActiveEntitlements[REVENUECAT_ENTITLEMENTS.societyPatron]
           ? REVENUECAT_PRODUCT_IDS.societyPatron
           : '';
-      handleCustomerInfo(customerInfo);
-      const refreshedWallet = await onPurchaseComplete?.(tier);
+      handleCustomerInfo(restoredCustomerInfo);
+      const refreshedWallet = await onPurchaseComplete?.(restoredSubscriptionProductId);
       logInfo('RevenueCat restore completed', {
         environment: appEnvironment,
         keySource: revenueCatApiKeySource,
         anonymousUserId,
-        customerInfo: summarizeCustomerInfo(customerInfo),
+        customerInfo: summarizeCustomerInfo(restoredCustomerInfo),
         walletRefreshed: Boolean(refreshedWallet),
       });
       appBridge.showToast('Purchases restored.');
@@ -378,9 +380,9 @@ export const RemoveAdvertsScreen = ({
         keySource: revenueCatApiKeySource,
         anonymousUserId,
       });
-      const message = buildUserErrorMessage('Restore failed. Please try again.', error);
-      appBridge.setErrorMessage(message);
-      Alert.alert('Restore Failed', message);
+      const restoreErrorMessage = buildUserErrorMessage('Restore failed. Please try again.', error);
+      appBridge.setErrorMessage(restoreErrorMessage);
+      Alert.alert('Restore Failed', restoreErrorMessage);
     } finally {
       setPurchaseBusy(false);
     }
@@ -388,15 +390,15 @@ export const RemoveAdvertsScreen = ({
 
   const renderPlan = (planKey) => {
     const plan = purchasePlans[planKey];
-    const productPackage = packagesByProductId[plan.productId];
-    const storeProduct = storeProductsById[plan.productId];
-    const product = productPackage?.product || storeProduct;
+    const subscriptionPackage = packagesByProductId[plan.productId];
+    const crownPurseStoreProduct = storeProductsById[plan.productId];
+    const displayedProduct = subscriptionPackage?.product || crownPurseStoreProduct;
     if (plan.purchaseType === 'package' && hasActiveSubscription) return null;
-    const title = plan.title || product?.title || product?.identifier || plan.productId;
+    const title = plan.title || displayedProduct?.title || displayedProduct?.identifier || plan.productId;
     const rewardText = getPlanRewardText(planKey);
-    const body = plan.body || product?.description || '';
-    const price = formatProductPrice(product);
-    const isUnavailable = purchaseBusy || !product;
+    const body = plan.body || displayedProduct?.description || '';
+    const price = formatProductPrice(displayedProduct);
+    const isUnavailable = purchaseBusy || !displayedProduct;
     return (
       <View key={planKey} style={styles.shopPlan}>
         <Text style={styles.shopPlanTitle}>{rewardText && !title.includes(rewardText) ? `${title} - ${rewardText}` : title}</Text>

@@ -22,8 +22,8 @@ const runStorageOperation = async (operation, key, task) => {
 // Loads the saved story state from local device storage.
 export const loadGameState = async () => {
   return runStorageOperation('loadGameState', STORAGE_KEY, async () => {
-    const saved = await AsyncStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved) : null;
+    const savedGameStateJson = await AsyncStorage.getItem(STORAGE_KEY);
+    return savedGameStateJson ? JSON.parse(savedGameStateJson) : null;
   });
 };
 
@@ -43,8 +43,8 @@ export const resetGameState = async () => {
 
 export const loadAdsRemovedState = async () => {
   return runStorageOperation('loadAdsRemovedState', ADS_REMOVED_KEY, async () => {
-    const saved = await AsyncStorage.getItem(ADS_REMOVED_KEY);
-    return saved === 'true';
+    const savedAdsRemovedFlag = await AsyncStorage.getItem(ADS_REMOVED_KEY);
+    return savedAdsRemovedFlag === 'true';
   });
 };
 
@@ -56,8 +56,8 @@ export const saveAdsRemovedState = async (isRemoved) => {
 
 export const loadCurrencySymbolState = async () => {
   return runStorageOperation('loadCurrencySymbolState', CURRENCY_SYMBOL_KEY, async () => {
-    const saved = await AsyncStorage.getItem(CURRENCY_SYMBOL_KEY);
-    return saved || '$';
+    const savedCurrencySymbol = await AsyncStorage.getItem(CURRENCY_SYMBOL_KEY);
+    return savedCurrencySymbol || '$';
   });
 };
 
@@ -69,8 +69,8 @@ export const saveCurrencySymbolState = async (symbol) => {
 
 export const loadCrownWalletState = async () => {
   return runStorageOperation('loadCrownWalletState', CROWN_WALLET_KEY, async () => {
-    const saved = await AsyncStorage.getItem(CROWN_WALLET_KEY);
-    return saved ? JSON.parse(saved) : null;
+    const savedWalletJson = await AsyncStorage.getItem(CROWN_WALLET_KEY);
+    return savedWalletJson ? JSON.parse(savedWalletJson) : null;
   });
 };
 
@@ -83,31 +83,31 @@ export const saveCrownWalletState = async (wallet) => {
 // Loads the stable anonymous ID used for backend sync.
 export const loadAnonymousUserId = async () => {
   return runStorageOperation('loadAnonymousUserId', ANONYMOUS_USER_ID_KEY, async () => {
-    const saved = await AsyncStorage.getItem(ANONYMOUS_USER_ID_KEY);
-    if (saved) return saved;
-    const generated = `anon_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
-    await AsyncStorage.setItem(ANONYMOUS_USER_ID_KEY, generated);
-    return generated;
+    const savedAnonymousUserId = await AsyncStorage.getItem(ANONYMOUS_USER_ID_KEY);
+    if (savedAnonymousUserId) return savedAnonymousUserId;
+    const generatedAnonymousUserId = `anon_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
+    await AsyncStorage.setItem(ANONYMOUS_USER_ID_KEY, generatedAnonymousUserId);
+    return generatedAnonymousUserId;
   });
 };
 
 // Stores bounded AI outcome reports for optional backend submission.
 export const saveAiOutcomeReport = async (report) => {
   await runStorageOperation('saveAiOutcomeReport', AI_OUTCOME_REPORTS_KEY, async () => {
-    const saved = await AsyncStorage.getItem(AI_OUTCOME_REPORTS_KEY);
-    const reports = saved ? JSON.parse(saved) : [];
-    reports.unshift({
+    const savedReportsJson = await AsyncStorage.getItem(AI_OUTCOME_REPORTS_KEY);
+    const reportQueue = savedReportsJson ? JSON.parse(savedReportsJson) : [];
+    reportQueue.unshift({
       ...report,
       reportedAt: new Date().toISOString(),
     });
-    await AsyncStorage.setItem(AI_OUTCOME_REPORTS_KEY, JSON.stringify(reports.slice(0, 25)));
+    await AsyncStorage.setItem(AI_OUTCOME_REPORTS_KEY, JSON.stringify(reportQueue.slice(0, 25)));
   });
 };
 
 export const loadAppSettingsState = async (fallbackSettings = {}) => {
   return runStorageOperation('loadAppSettingsState', APP_SETTINGS_KEY, async () => {
-    const saved = await AsyncStorage.getItem(APP_SETTINGS_KEY);
-    return saved ? { ...fallbackSettings, ...JSON.parse(saved) } : fallbackSettings;
+    const savedSettingsJson = await AsyncStorage.getItem(APP_SETTINGS_KEY);
+    return savedSettingsJson ? { ...fallbackSettings, ...JSON.parse(savedSettingsJson) } : fallbackSettings;
   });
 };
 
