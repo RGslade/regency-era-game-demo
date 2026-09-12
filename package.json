@@ -1,0 +1,42 @@
+{
+  "name": "regency-era-game",
+  "version": "0.1.0",
+  "main": "expo/AppEntry",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "lint": "expo lint",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run typecheck",
+    "supabase:start": "supabase start",
+    "supabase:reset": "supabase db reset",
+    "supabase:deploy:functions": "supabase functions deploy app-config && supabase functions deploy generate-story-turn && supabase functions deploy crown-wallet && supabase functions deploy report-ai-outcome && supabase functions deploy user-settings && supabase functions deploy revenuecat-webhook",
+    "build:android": "eas build --platform android",
+    "build:ios": "eas build --platform ios"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "2.1.2",
+    "expo": "~53.0.27",
+    "expo-audio": "^0.4.9",
+    "expo-dev-client": "~5.2.4",
+    "expo-splash-screen": "~0.30.10",
+    "react": "19.0.0",
+    "react-native": "0.79.6",
+    "react-native-google-mobile-ads": "^15.8.3",
+    "react-native-purchases": "^9.15.2"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.29.7",
+    "@react-native-community/cli": "^20.1.3",
+    "@types/react": "~19.0.10",
+    "eslint": "^9.39.4",
+    "eslint-config-expo": "~9.2.0",
+    "typescript": "~5.8.3"
+  },
+  "engines": {
+    "node": "^22.18.0",
+    "npm": "^11.12.1"
+  },
+  "private": true
+}
