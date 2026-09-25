@@ -22,7 +22,7 @@
     "expo-dev-client": "~5.2.4",
     "expo-splash-screen": "~0.30.10",
     "react": "19.0.0",
-    "react-native": "0.79.6",
+    "react-native": "0.87.1",
     "react-native-google-mobile-ads": "^15.8.3",
     "react-native-purchases": "^9.15.2"
   },
